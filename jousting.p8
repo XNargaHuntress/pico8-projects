@@ -45,7 +45,7 @@ function _update()
   -- start screen update
  end
  if (game_mode == 1) then
- 	game_update() --play game
+  game_update() --play game
  end
  last_game_mode=game_mode
  stats.cpu=stat(1)
@@ -54,13 +54,13 @@ end
 
 function game_update()
  if (last_game_mode != game_mode) then
- 	game_init()
+  game_init()
  end
-	update_player()
-	update_enmy()
+ update_player()
+ update_enmy()
  update_particles()
-	cam.x = mid(0,plyr.x-64,256)
-	cam.y = mid(0,plyr.y-64,128)
+ cam.x = mid(0,plyr.x-64,256)
+ cam.y = mid(0,plyr.y-64,128)
 end
 
 function game_cleanup()
@@ -80,16 +80,16 @@ function update_player()
  if (btn(3)) then v += 1 end
 
  if (btnp(5)) then
- 	if (plyr.rdy) then a=-1
- 	else a=1
- 	end
+  if (plyr.rdy) then a=-1
+  else a=1
+  end
  end
  local l=plyr.lchrg
  update_jstr(plyr,h,v,a,btn(4))
  collide_enmy()
 
  if (plyr.lchrg<=0 and l>=15) then
- 	camera_shake=0.25
+  camera_shake=0.25
  end
 end
 
@@ -108,7 +108,7 @@ function _draw()
   -- start screen update
  end
  if (game_mode == 1) then
- 	game_draw() --play game
+  game_draw() --play game
  end
  if (stats.draw) then
   print('cpu:'..stats.cpu,80,1,8)
@@ -117,8 +117,8 @@ function _draw()
 end
 
 function game_draw()
-	-- handle camera effects
-	camera_effects()
+ -- handle camera effects
+ camera_effects()
 
  cls()
 
@@ -168,46 +168,46 @@ function make_jouster(x,y,c)
 end
 
 function update_jstr(j,h,v,a,b)
-	j.spd += h * j.acc
-	j.vspd += v * j.acc * 2
+ j.spd += h * j.acc
+ j.vspd += v * j.acc * 2
 
-	-- lance charge
-	if (b) then
-		j.lchrg+=1
-		j.lchrg=mid(0,j.lchrg,15)
-	end
-
-	-- thrust and gfx
-	if (h != 0) then
-	 j.flipped = (h == -1)
-	 j.thrust = true
-	 j.thrust_idx = (j.thrust_idx + 1) % 2
-	else
-		j.thrust = false
-		j.thrust_idx = 0
-	end
-
-	-- slow to a vertical stop
-	if (v == 0) then
-		j.vspd += -sign(j.vspd) * j.acc
-		if (abs(j.vspd) < 0.1) then j.vspd = 0 end
-	end
-
-	-- speed and position
-	j.vspd = mid(-j.max/2,j.vspd,j.max/2)
-	j.spd = mid(-j.max,j.spd,j.max)
-	j.x += j.spd
-	j.y += j.vspd
-
-	-- attack!
-	if (a!=0) then
-		j.rdy=a==1
-		j.rdy_anim=0
+ -- lance charge
+ if (b) then
+  j.lchrg+=1
+  j.lchrg=mid(0,j.lchrg,15)
  end
-	collide_map(j)
-	if (j.lchrg!=15) then j.rdy=false end
-	j.x = (j.x + 384)%384
-	j.y = (j.y + 256)%256
+
+ -- thrust and gfx
+ if (h != 0) then
+  j.flipped = (h == -1)
+  j.thrust = true
+  j.thrust_idx = (j.thrust_idx + 1) % 2
+ else
+  j.thrust = false
+  j.thrust_idx = 0
+ end
+
+ -- slow to a vertical stop
+ if (v == 0) then
+  j.vspd += -sign(j.vspd) * j.acc
+  if (abs(j.vspd) < 0.1) then j.vspd = 0 end
+ end
+
+ -- speed and position
+ j.vspd = mid(-j.max/2,j.vspd,j.max/2)
+ j.spd = mid(-j.max,j.spd,j.max)
+ j.x += j.spd
+ j.y += j.vspd
+
+ -- attack!
+ if (a!=0) then
+  j.rdy=a==1
+  j.rdy_anim=0
+ end
+ collide_map(j)
+ if (j.lchrg!=15) then j.rdy=false end
+ j.x = (j.x + 384)%384
+ j.y = (j.y + 256)%256
 end
 
 function collide_enmy()
@@ -225,7 +225,7 @@ function collide_enmy()
     j1=enmy
     j2=plyr
    else
-   	break_all = true
+    break_all = true
    end
   end
 
@@ -244,47 +244,47 @@ function collide_enmy()
   end
   
   if (break_all) then
-  	if (plyr.rdy) then
-  		plyr.rdy=false
-  		plyr.lchrg=0
-  	end
-  	if (enmy.rdy) then
-  		enmy.rdy=false
-  		enmy.lchrg=0
-  	end
+   if (plyr.rdy) then
+    plyr.rdy=false
+    plyr.lchrg=0
+   end
+   if (enmy.rdy) then
+    enmy.rdy=false
+    enmy.lchrg=0
+   end
   end
  end
 end
 
 function collide_map(j)
-	local x=flr(j.x/8)
-	local y=flr(j.y/8)
-	local ox = sign(j.spd)
-	local oy = sign(j.vspd)
-	if (fget(mget(x,y+oy),1) or
+ local x=flr(j.x/8)
+ local y=flr(j.y/8)
+ local ox = sign(j.spd)
+ local oy = sign(j.vspd)
+ if (fget(mget(x,y+oy),1) or
      fget(mget(x-1,y+oy),1)) then
-		j.vspd=-j.vspd/2
-		j.y=y*8
-		if (oy==-1) then j.y+=8 end
-	end
-	if (fget(mget(x+ox,y),1) or
-	    fget(mget(x+ox,y+1),1)) then
-		j.spd=-j.spd/2
-		j.x=x*8
-		if (ox==-1) then j.x+=8 end
-	end
-	-- break the lance if needed
-	local lancex=j.x
-	if (j.flipped) then
-		lancex-=14
-	else
-		lancex+=13
-	end
-	lancex=flr(lancex/8)
-	if (j.rdy and fget(mget(lancex,y),1)) then
-		j.rdy=false
-		j.lchrg=0
-	end
+  j.vspd=-j.vspd/2
+  j.y=y*8
+  if (oy==-1) then j.y+=8 end
+ end
+ if (fget(mget(x+ox,y),1) or
+     fget(mget(x+ox,y+1),1)) then
+  j.spd=-j.spd/2
+  j.x=x*8
+  if (ox==-1) then j.x+=8 end
+ end
+ -- break the lance if needed
+ local lancex=j.x
+ if (j.flipped) then
+  lancex-=14
+ else
+  lancex+=13
+ end
+ lancex=flr(lancex/8)
+ if (j.rdy and fget(mget(lancex,y),1)) then
+  j.rdy=false
+  j.lchrg=0
+ end
 end
 
 function is_facing(j1,j2)
@@ -301,8 +301,8 @@ function draw_jouster(j)
  local offset=8
  local t_offset=-16
  if(j.flipped) then
- 	offset=0
- 	t_offset=8
+  offset=0
+  t_offset=8
  end
  spr(16, j.x-8,j.y,2,1,j.flipped,false)
  spr(32,j.x-offset,j.y-4,1,1,j.flipped,false)
@@ -316,11 +316,11 @@ function draw_jouster(j)
  if (j.rdy) then
   local x1,x2
   if (j.flipped) then
-  	x1=j.x-2
-  	x2=x1-12
+   x1=j.x-2
+   x2=x1-12
   else
-  	x1=j.x+1
-  	x2=x1+12
+   x1=j.x+1
+   x2=x1+12
   end
   local lcolor=j.color
   if (j.rdy_anim==0) then lcolor=7
@@ -334,9 +334,9 @@ end
 -->8
 -- h.u.d. functions
 function draw_hud()
-	print('lance',1,1,8)
-	rect(1,8,33,10,8)
-	line(2,9,plyr.lchrg*2+2,9,7)
+ print('lance',1,1,8)
+ rect(1,8,33,10,8)
+ line(2,9,plyr.lchrg*2+2,9,7)
 
  -- radar
  circfill(118,118,8,6)
@@ -419,25 +419,25 @@ end
 -->8
 -- effect methods
 function camera_effects()
-	screen_shake()
+ screen_shake()
 end
 
 camera_shake=0
 function screen_shake()
-	local fade = 0.625
-	local o_x=16-rnd(32)
-	local o_y=16-rnd(32)
+ local fade = 0.625
+ local o_x=16-rnd(32)
+ local o_y=16-rnd(32)
 
-	o_x *= camera_shake
-	o_y *= camera_shake
+ o_x *= camera_shake
+ o_y *= camera_shake
 
-	cam.draw_x = cam.x + o_x
-	cam.draw_y = cam.y + o_y
+ cam.draw_x = cam.x + o_x
+ cam.draw_y = cam.y + o_y
 
-	camera_shake *= fade
-	if (camera_shake <0.05) then
-		camera_shake = 0
-	end
+ camera_shake *= fade
+ if (camera_shake <0.05) then
+  camera_shake = 0
+ end
 end
 -->8
 -- particle effects
@@ -478,9 +478,9 @@ function draw_particles()
   local y = p.y-p.size/2
   local c = p.color
   if (p.life == p.lmax-1) then
-  	c=7
+   c=7
   elseif (p.life == p.lmax-2) then
-  	c=7
+   c=7
   end
   rectfill(x,y,x+p.size,y+p.size,p.color)
  end
