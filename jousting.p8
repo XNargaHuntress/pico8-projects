@@ -18,49 +18,196 @@ cam.y=0
 cam.draw_x=0
 cam.draw_y=0
 
-last_game_mode=0
-game_mode=1 --what screen to use
+last_game_mode=100
+game_mode=0 --what screen to use
 
 function _init()
-end
-
-function game_init()
- plyr=make_jouster(56,64,9)
- plyr.rdy=true
- local bob=make_enemy(180,40,8,"basic")
- bob.max=3
- cam={0,0}
+ game_mode=0
+ mload(0,0,48,32)
+ mload(48,0,24,20)
 end
 
 function _update()
- -- handle cleanup
+ transition_update()
+
  if (last_game_mode != game_mode) then
   if (last_game_mode == 1) then
-   -- cleanup game
+   game_cleanup()
   end
  end
 
  -- handle updates
  if (game_mode == 0) then
-  -- start screen update
+  start_update()
  end
  if (game_mode == 1) then
   game_update() --play game
  end
  last_game_mode=game_mode
- stats.cpu=stat(1)
- stats.mem=stat(0)
+end
+
+function _draw()
+ if (game_mode == 0) then
+  start_draw()
+ end
+ if (game_mode == 1) then
+  game_draw() --play game
+ end
+ if (stats.draw) then
+  stats.cpu=stat(1)
+  stats.mem=stat(0)
+  print('cpu:'..stats.cpu,80,1,8)
+  print('mem:'..stats.mem,80,10,8)
+ end
+end
+-->8
+-- screens
+
+-- transitions
+transitioning=false
+trans_timer=15
+trans_delay=0
+next_state=0
+fade_idx=1
+lst_fade_idx=1
+
+fade_tbl={
+ {0,0,0,0,0,0,0,0},
+ {1,1,1,1,0,0,0,0},
+ {2,2,2,2,1,0,0,0},
+ {3,3,3,3,1,0,0,0},
+ {4,4,2,2,2,1,0,0},
+ {5,5,5,1,1,1,0,0},
+ {6,6,13,13,5,5,1,0},
+ {7,6,6,13,13,5,1,0},
+ {8,8,8,2,2,2,0,0},
+ {9,9,4,4,4,5,0,0},
+ {10,10,9,4,4,5,5,0},
+ {11,11,3,3,3,3,0,0},
+ {12,12,12,3,1,1,1,0},
+ {13,13,5,5,1,1,1,0},
+ {14,14,13,4,2,2,1,0},
+ {15,15,13,13,5,5,1,0}
+}
+
+function transition(to_state,delay)
+ next_state=to_state
+ trans_timer=15
+ trans_delay=delay
+ transitioning=true
+end
+
+function transition_update()
+ if (transitioning) then
+  trans_delay=max(trans_delay-1,0)
+
+  if (trans_delay==0) then
+   trans_timer-=1
+   trans_timer=mid(0,trans_timer,15)
+   fade_idx=8-flr(trans_timer/2)
+   if (lst_fade_idx != fade_idx) fade(fade_idx)
+   lst_fade_idx = fade_idx
+   if (trans_timer <= 0) then
+    transitioning=false
+    game_mode=next_state
+    fade_idx=1
+    lst_fade_idx=1
+    pal()
+   end
+  end
+ end
+end
+
+function fade(idx)
+ idx=mid(1,flr(idx),8)
+ for i=0,15 do
+  pal(i,fade_tbl[i+1][idx])
+ end
+end
+
+function tpal(from,to)
+ pal(from,fade_tbl[to+1][fade_idx])
+end
+
+-- game screen
+function game_init()
+ spawn_plyr()
+ plyr.rdy=true
+ spawn_enemy('lazy')
 end
 
 function game_update()
  if (last_game_mode != game_mode) then
   game_init()
  end
- update_player()
- update_enmy()
+
+ if (!transitioning) then
+  update_player()
+  update_enmy()
+ end
+
  update_particles()
+ map_update()
+
  cam.x = mid(0,plyr.x-64,256)
  cam.y = mid(0,plyr.y-64,128)
+end
+
+function game_draw()
+ -- handle camera effects
+ camera_effects()
+
+ cls()
+
+ -- draw background
+ camera(cam.draw_x/4,cam.draw_y/4)
+ tpal(12,12)
+ map(48,0,0,0,24,20)
+
+ -- draw foreground
+ camera(cam.draw_x,cam.draw_y)
+ tpal(12,15)
+ map(0,0,0,0,48,32)
+
+ -- draw jousters
+ draw_jouster(plyr)
+
+ for e in all(enemies) do
+  draw_jouster(e)
+ end
+
+ -- draw particles
+ draw_particles()
+
+ -- draw hud
+ camera(0,0)
+ draw_hud()
+end
+
+function draw_hud()
+ print('lance',1,1,8)
+ rect(1,8,33,10,8)
+ line(2,9,plyr.lchrg*2+2,9,7)
+
+ -- radar
+ circfill(118,118,8,6)
+ circ(118,118,8,13)
+ circ(118,118,5,13)
+ circ(118,118,2,13)
+ for e in all(enemies) do
+  local x=mid(-64,e.x-plyr.x,64)/8
+  local y=mid(-64,e.y-plyr.y,64)/8
+  local mag=sqrt(x*x+y*y)
+  local rad = 1
+  if (mag > 8) then
+   x /= mag
+   y /= mag
+   x*=8
+   y*=8
+   rad = 0.5
+  end
+  circfill(118+x,118+y,rad,8)
+ end
 end
 
 function game_cleanup()
@@ -68,7 +215,44 @@ function game_cleanup()
  for e in all(enemies) do
   del(enemies,e)
  end
+ for p in all(particles) do
+  del(particles,p)
+ end
 end
+
+-- start screen
+flashing=false
+flash_idx=0
+function start_init()
+ cam.x=0
+ cam.y=0
+ flashing=false
+ flash_idx=0
+ pal()
+end
+
+function start_update()
+ if (last_game_mode != game_mode) then
+  start_init()
+ end
+
+ if (btnp(4) && !transitioning) then
+  flashing=true
+  transition(1,15)
+ end
+
+ if (flashing) flash_idx=(flash_idx+1)%4
+end
+
+function start_draw()
+ cls()
+ local col=flr(flash_idx/2)
+ if (col==0) col=6
+ if (col==1) col=7
+ print('press o to start',54,100,col)
+end
+-->8
+-- player
 
 function update_player()
  local h = 0
@@ -93,6 +277,34 @@ function update_player()
  end
 end
 
+function spawn_plyr()
+ local pos=get_spawn_loc(0)
+ if (plyr==nil) plyr=make_jouster(pos.x,pos.y,9)
+ reset_jstr(plyr)
+ plyr.x=pos.x
+ plyr.y=pos.y
+end
+
+lst_spwn=0
+function get_spawn_loc(type)
+ local pos={}
+ if #spawn_pts <= 0 then
+  if (type==1) then
+   pos.x=180
+   pos.y=40
+  else
+   pos.x=56
+   pos.y=64
+  end
+ else
+  lst_spwn=(lst_spwn+1)%#spawn_pts
+  local pt = spawn_pts[lst_spwn]
+  pos.x=pt.x*8
+  pos.y=(pt.y-1)*8
+ end
+ return pos
+end
+
 function destroy_player()
  add_particles(plyr.x,plyr.y,plyr.color,15,8)
 end
@@ -102,52 +314,8 @@ function sign(a)
  if (a < 0) then return -1 end
  if (a == 0) then return 0 end
 end
-
-function _draw()
- if (game_mode == 0) then
-  -- start screen update
- end
- if (game_mode == 1) then
-  game_draw() --play game
- end
- if (stats.draw) then
-  print('cpu:'..stats.cpu,80,1,8)
-  print('mem:'..stats.mem,80,10,8)
- end
-end
-
-function game_draw()
- -- handle camera effects
- camera_effects()
-
- cls()
-
- -- draw background
- camera(cam.draw_x/4,cam.draw_y/4)
- pal(12,12)
- map(48,0,0,0,24,20)
-
- -- draw foreground
- camera(cam.draw_x,cam.draw_y)
- pal(12,15)
- map(0,0,0,0,48,32)
-
- -- draw jousters
- draw_jouster(plyr)
-
- for e in all(enemies) do
-  draw_jouster(e)
- end
-
- -- draw particles
- draw_particles()
-
- -- draw hud
- camera(0,0)
- draw_hud()
-end
 -->8
--- jouster methods
+-- jousters
 
 function make_jouster(x,y,c)
  local a={}
@@ -165,6 +333,14 @@ function make_jouster(x,y,c)
  a.rdy_anim=0
  a.lchrg=15
  return a
+end
+
+function reset_jstr(j)
+ j.spd=0
+ j.vspd=0
+ j.rdy=false
+ j.rdy_anim=0
+ j.lchrg=15
 end
 
 function update_jstr(j,h,v,a,b)
@@ -242,7 +418,7 @@ function collide_enmy()
     j2.lchrg=0
    end
   end
-  
+
   if (break_all) then
    if (plyr.rdy) then
     plyr.rdy=false
@@ -296,7 +472,7 @@ function is_facing(j1,j2)
 end
 
 function draw_jouster(j)
- pal(12,j.color)
+ tpal(12,j.color)
  -- draw the sprites
  local offset=8
  local t_offset=-16
@@ -329,37 +505,11 @@ function draw_jouster(j)
   j.rdy_anim=mid(0,j.rdy_anim+1,2)
   line(x1,j.y,x2,j.y,lcolor)
  end
- pal(12,12)
+ tpal(12,12)
 end
 -->8
--- h.u.d. functions
-function draw_hud()
- print('lance',1,1,8)
- rect(1,8,33,10,8)
- line(2,9,plyr.lchrg*2+2,9,7)
-
- -- radar
- circfill(118,118,8,6)
- circ(118,118,8,13)
- circ(118,118,5,13)
- circ(118,118,2,13)
- for e in all(enemies) do
-  local x=mid(-64,e.x-plyr.x,64)/8
-  local y=mid(-64,e.y-plyr.y,64)/8
-  local mag=sqrt(x*x+y*y)
-  local rad = 1
-  if (mag > 8) then
-   x /= mag
-   y /= mag
-   x*=8
-   y*=8
-   rad = 0.5
-  end
-  circfill(118+x,118+y,rad,8)
- end
-end
--->8
--- ai methods
+-- ai
+ai_order={'lazy','basic','aggressive','sonofacrap'}
 brains={
  basic=function(e)
   local h = 0
@@ -371,7 +521,37 @@ brains={
   else h=-1
   end
 
-  if (plyr.y > e.y) then v=1
+  if (plyr.y > e.y-1) then v=1
+  else v=-1
+  end
+
+  if (dist(plyr.x,plyr.y,e.x,e.y) > 96) then
+   if (e.spd > (h*e.spd/2)) then h=-1
+   elseif (e.spd < (h*e.spd/2)) then h=1
+   else h=0
+   end
+  end
+
+  if (abs(plyr.x-e.x) < 40) then
+   if (e.rdy==false) then a=1 end
+  else
+   a=-1
+  end
+
+  b=delay_chrg(e)
+  update_jstr(e,h,v,a,b)
+ end,
+ aggressive=function(e)
+  local h=0
+  local v=0
+  local a=0
+  local b=false
+
+  if (plyr.x > e.x) then h=1
+  else h=-1
+  end
+
+  if (plyr.y > e.y-2) then v=1
   else v=-1
   end
 
@@ -381,25 +561,63 @@ brains={
    a=-1
   end
 
-  if (e.lchrg < 15) then
-   if (e.lchrg <= 0 and e.delay > 0) then
-    e.delay -= 1
-    b = false
-   else
-    b = true
-   end
-  else
-   e.delay = 15
-  end
-
+  b=delay_chrg(e)
   update_jstr(e,h,v,a,b)
  end
 }
+
+function delay_chrg(e)
+ local b=false
+ if (e.lchrg < 15) then
+  if (e.lchrg <= 0 and e.delay > 0) then
+   e.delay -= 1
+   b = false
+  else
+   b = true
+  end
+ else
+  e.delay = 15
+ end
+ return b
+end
+
+function dist(x1,y1,x2,y2)
+ local x=abs(x1-x2)
+ local y=abs(y1-y2)
+ return sqrt(x*x+y*y)
+end
+
+-- temp
+brains.lazy=brains.basic
+brains.sonofacrap=brains.basic
 -->8
--- enemy methods
-function make_enemy(x,y,col,ai)
+-- enemy
+
+function spawn_enemy(ai)
+ local col=8
+ local spd=3
+ local loc=get_spawn_loc(1)
+ if (ai=='basic') then
+  col=10
+  spd=3
+ elseif (ai=='lazy') then
+  col=15
+  spd=3
+ elseif (ai=='aggressive') then
+  col=8
+  spd=4
+ elseif (ai=='sonofacrap') then
+  col=14
+  spd=5
+ end
+
+ make_enemy(loc.x,loc.y,col,ai,spd)
+end
+
+function make_enemy(x,y,col,ai,spd)
  local e = make_jouster(x,y,col)
- e.ai = ai
+ e.max=spd
+ e.ai=ai
  e.delay=15
  add(enemies,e)
  return e
@@ -415,9 +633,66 @@ function destroy_enemy(e)
  del(enemies,e)
  add_particles(e.x,e.y,e.color,15,8)
  camera_shake=0.25
+
+ local ai_idx=ai_order[e.ai]
+ ai_idx=max(ai_idx+1,#ai_order)
+ spawn_enemy(ai_order[ai_idx])
 end
 -->8
--- effect methods
+-- map
+
+anim_tiles={}
+spawn_pts={}
+function mload(x1,y1,w,h)
+ for at in all(anim_tiles) do
+  del(anim_tiles,at)
+ end
+ for sp in all(spawn_pts) do
+  del(spawn_pts,sp)
+ end
+
+ for y=y1,h do
+  for x=x1,w do
+   local id=mget(x,y)
+   local flg=fget(id)
+   local pos={}
+   pos.x=x
+   pos.y=y
+   pos.ido=id
+   pos.idc=0
+   if (flg==2) add(anim_tiles,pos)
+   if (flg==3) add(spawn_pts,pos)
+  end
+ end
+end
+
+map_fctr=0
+map_fc=5
+function map_update()
+ map_fctr=flr((map_fctr+1)%map_fc)
+ if (map_fctr==0) then
+  for at in all(anim_tiles) do
+   local addr=(at.x*64)+at.y
+   if (at.x>31) addr += 0x1000
+   if (at.x<31) addr += 0x2000
+   at.idc = (at.idc+1)%4
+   poke(addr,at.ido+at.idc)
+  end
+ end
+end
+
+function map_cleanup()
+ for at in all(anim_tiles) do
+  local addr=(at.x*64)+at.y
+  if (at.x>31) addr += 0x1000
+  if (at.x<31) addr += 0x2000
+  poke(addr,at.ido)
+ end
+end
+-->8
+-- effects
+
+-- camera
 function camera_effects()
  screen_shake()
 end
@@ -439,8 +714,8 @@ function screen_shake()
   camera_shake = 0
  end
 end
--->8
--- particle effects
+
+-- particles
 particles={}
 function add_particles(x,y,c,num,sz)
  for i=1,num do
@@ -484,16 +759,6 @@ function draw_particles()
   end
   rectfill(x,y,x+p.size,y+p.size,p.color)
  end
-end
--->8
--- start screen
-
-function start_update()
-end
-
-function start_draw()
-cls()
--- todo finish
 end
 __gfx__
 00000000cccccccccccccccccccccccccccc5ddccccccccccdd5cccccccccccc1111111101111111111111100000000000000000000000000000000000000000
