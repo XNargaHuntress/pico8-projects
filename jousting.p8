@@ -29,6 +29,7 @@ end
 
 function _update()
  transition_update()
+ cor_update()
 
  if (last_game_mode != game_mode) then
   if (last_game_mode == 1) then
@@ -59,6 +60,22 @@ function _draw()
   print('cpu:'..stats.cpu,80,1,8)
   print('mem:'..stats.mem,80,10,8)
  end
+end
+
+coroutines={}
+function add_cor(cor)
+ local c=cocreate(cor)
+ add(coroutines,c)
+end
+
+function cor_update()
+ for cor in all(coroutines) do
+  local alive=coresume(cor)
+  if (not alive) del(coroutines,cor)
+end
+
+function del_cor(cor)
+ del(coroutines,cor)
 end
 -->8
 -- screens
@@ -133,6 +150,7 @@ end
 function game_init()
  spawn_plyr()
  plyr.rdy=true
+ plyr.hlth=5
  spawn_enemy('lazy')
 end
 
@@ -169,7 +187,7 @@ function game_draw()
  map(0,0,0,0,48,32)
 
  -- draw jousters
- draw_jouster(plyr)
+ if (plyr.hlth>0 and not plyr.boom) draw_jouster(plyr)
 
  for e in all(enemies) do
   draw_jouster(e)
@@ -184,9 +202,14 @@ function game_draw()
 end
 
 function draw_hud()
- print('lance',1,1,8)
- rect(1,8,33,10,8)
- line(2,9,plyr.lchrg*2+2,9,7)
+ print('l',1,91,9)
+ rect(1,95,3,127,9)
+ if (plyr.lchrg>0) rectfill(2,126,2,126-plyr.lchrg*2,7)
+
+ print('h',5,91,9)
+ for i=0,plyr.hlth-1 do
+  rectfill(5,120-i*6,8,125-i*6,9)
+ end
 
  -- radar
  circfill(118,118,8,6)
@@ -206,7 +229,6 @@ function draw_hud()
    y*=8
    rad = 0.5
   end
-  print(e.ai,1,ytxt,7)
   circfill(118+x,118+y,rad,8)
  end
 end
@@ -229,10 +251,13 @@ function start_init()
  cam.y=0
  flashing=false
  flash_idx=0
+ start_t=0
  pal()
 end
 
+start_t=0
 function start_update()
+ start_t=flr((start_t+1)%30)
  if (last_game_mode != game_mode) then
   start_init()
  end
@@ -247,7 +272,8 @@ end
 
 function start_draw()
  cls()
- map(73,0,32,40,8,3)
+ local y=40+sin(start_t/30)*3
+ map(73,0,32,y,8,3)
  local col=flr(flash_idx/2)
  if (col==0) col=6
  if (col==1) col=7
@@ -257,25 +283,27 @@ end
 -- player
 
 function update_player()
- local h = 0
- local v = 0
- local a = 0
- if (btn(0)) then h -= 1 end
- if (btn(1)) then h += 1 end
- if (btn(2)) then v -= 1 end
- if (btn(3)) then v += 1 end
+ if (not plyr.boom) then
+  local h = 0
+  local v = 0
+  local a = 0
+  if (btn(0)) then h -= 1 end
+  if (btn(1)) then h += 1 end
+  if (btn(2)) then v -= 1 end
+  if (btn(3)) then v += 1 end
 
- if (btnp(5)) then
-  if (plyr.rdy) then a=-1
-  else a=1
+  if (btnp(5)) then
+   if (plyr.rdy) then a=-1
+   else a=1
+   end
   end
- end
- local l=plyr.lchrg
- update_jstr(plyr,h,v,a,btn(4))
- collide_enmy()
+  local l=plyr.lchrg
+  update_jstr(plyr,h,v,a,btn(4))
+  collide_enmy()
 
- if (plyr.lchrg<=0 and l>=15) then
-  camera_shake=0.25
+  if (plyr.lchrg<=0 and l>=15) then
+   camera_shake=0.25
+  end
  end
 end
 
@@ -285,6 +313,8 @@ function spawn_plyr()
  reset_jstr(plyr)
  plyr.x=pos.x
  plyr.y=pos.y
+ plyr.spawnctr=2
+ plyr.boom=false
 end
 
 lst_spwn=0
@@ -309,6 +339,22 @@ end
 
 function destroy_player()
  add_particles(plyr.x,plyr.y,plyr.color,15,8)
+ -- wait 10f and spawn
+ plyr.hlth-=1
+ plyr.boom=true
+
+ if (plyr.hlth<=0) then
+  transition(0,10)
+ else
+  add_cor(wait10_spwn)
+ end
+end
+
+function wait10_spwn()
+ for i=1,10 do
+  yield()
+ end
+ spawn_plyr()
 end
 
 function sign(a)
@@ -334,6 +380,7 @@ function make_jouster(x,y,c)
  a.rdy=false
  a.rdy_anim=0
  a.lchrg=15
+ a.spawnctr=2
  return a
 end
 
@@ -396,18 +443,18 @@ function collide_enmy()
  for enmy in all(enemies) do
   if (abs(enmy.x-plyr.x) < 12 and abs(enmy.y-plyr.y) < 6) then
    -- check collision closer
-   if (plyr.y < enmy.y) then
+   if (abs(plyr.y-enmy.y)<0.05) then
+    break_all=true
+   elseif (plyr.y < enmy.y) then
     j1=plyr
     j2=enmy
    elseif (plyr.y > enmy.y) then
     j1=enmy
     j2=plyr
-   else
-    break_all = true
    end
   end
 
-  if (j1!=nil) then
+  if (not break_all) then
    if (is_facing(j1,j2) and j1.rdy) then
     if (j2==enmy) then
      destroy_enemy(enmy)
@@ -473,8 +520,21 @@ function is_facing(j1,j2)
  end
 end
 
+function tpal_all(c)
+ for i=0,15 do
+  tpal(i,c)
+ end
+end
+
 function draw_jouster(j)
- tpal(12,j.color)
+ if (j.spawnctr<=0) then
+  tpal(12,j.color)
+ elseif(j.spawnctr==2) then)
+  circfill(j.x,j.y,8,7)
+  tpal_all(1)
+ elseif (j.spawnctr==1) then
+  tpall_all(7)
+ end
  -- draw the sprites
  local offset=8
  local t_offset=-16
@@ -507,7 +567,12 @@ function draw_jouster(j)
   j.rdy_anim=mid(0,j.rdy_anim+1,2)
   line(x1,j.y,x2,j.y,lcolor)
  end
- tpal(12,12)
+
+ if (j.spawnctr <= 0) then tpal(12,12)
+ else
+  fade(fade_idx)
+  j.spawn_ctr -= 1
+ end
 end
 -->8
 -- ai
@@ -637,12 +702,12 @@ function destroy_enemy(e)
  del(enemies,e)
  add_particles(e.x,e.y,e.color,15,8)
  camera_shake=0.25
- 
+
  local ai_idx=0
  for i=1,#ai_order do
   if (ai_order[i]==e.ai) ai_idx=i
  end
- 
+
  ai_idx=min(ai_idx+1,#ai_order)
  spawn_enemy(ai_order[ai_idx])
 end
