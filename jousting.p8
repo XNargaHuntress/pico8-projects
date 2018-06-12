@@ -7,10 +7,7 @@ __lua__
 enemies={} --all enemies
 
 -- debugging, remove when done
-stats={}
-stats.cpu=0
-stats.mem=0
-stats.draw=false
+show_stats=false
 
 cam={}
 cam.x=0
@@ -27,6 +24,17 @@ function _init()
  mload(48,0,24,20)
 end
 
+update_fnc={
+ start_update,
+ game_update,
+ over_update
+}
+draw_fnc={
+ start_draw,
+ game_draw,
+ over_draw
+}
+
 function _update()
  transition_update()
  cor_update()
@@ -38,27 +46,17 @@ function _update()
  end
 
  -- handle updates
- if (game_mode == 0) then
-  start_update()
- end
- if (game_mode == 1) then
-  game_update() --play game
+ update_fnc[game_mode+1]()
  end
  last_game_mode=game_mode
 end
 
 function _draw()
- if (game_mode == 0) then
-  start_draw()
- end
- if (game_mode == 1) then
-  game_draw() --play game
- end
- if (stats.draw) then
-  stats.cpu=stat(1)
-  stats.mem=stat(0)
-  print('cpu:'..stats.cpu,80,1,8)
-  print('mem:'..stats.mem,80,10,8)
+ draw_fnc[game_mode+1]()
+ if (show_stats) then
+  print('cpu:'..stat(1),80,1,8)
+  print('mem:'..stat(0),80,7,8)
+  print('fps:'..stat(7),80,13,8)
  end
 end
 
@@ -152,6 +150,7 @@ function game_init()
  spawn_plyr()
  plyr.rdy=true
  plyr.hlth=5
+ plyr.score=0
  spawn_enemy('lazy')
 end
 
@@ -241,13 +240,61 @@ function draw_hud()
 end
 
 function game_cleanup()
- plyr=nil
  for e in all(enemies) do
   del(enemies,e)
  end
  for p in all(particles) do
   del(particles,p)
  end
+end
+
+-- game over screen
+prnk=''
+overtmr=0
+sprtxt={}
+spro=0
+function over_init()
+ if (plyr.score>25) prnk='godling'
+ elseif (plyr.score>20) prnk='demigod'
+ elseif (plyr.score>15) prnk='champion'
+ elseif (plyr.score>10) prnk='warrior'
+ elseif (plyr.score>7) prnk='contender'
+ elseif (plyr.score>5) prnk='gladiator'
+ elseif (plyr.score>3) prnk='arena hazard'
+ else prnk='cannon fodder'
+ end
+
+ spro=flr((128-#sprtxt*8)/2)
+ overtmr=0
+end
+
+function over_update()
+ if (last_game_mode != game_mode) then
+  over_init()
+ end
+
+ overtmr=flr((overtmr+1)%120)
+
+ if ((btnp(4) or btnp(5) and not transitioning) then
+  transition(0,15)
+ end
+end
+
+function over_draw()
+ local offset=0
+ for i=-1,0 do
+  if (i<0) tpal_all(8)
+  else fade(fade_idx)
+  end
+  for s=1,#sprtxt do
+   local t=flr((overtmr+120+i*4+s)%120)
+   local siny=sin(t/120)*2
+   spr(sprtxt[s],spro+(s-1)*8,16+siny,false,false)
+  end
+ end
+
+ print('you achieved the rank of', 8,40,7)
+ print('< '..prnk..' >',64-(#prnk*4-1)/2,58,7)
 end
 
 -- start screen
@@ -442,7 +489,7 @@ function update_jstr(j,h,v,a,b)
  if (j.lchrg!=15) then j.rdy=false end
  j.x = (j.x + 384)%384
  j.y = (j.y + 256)%256
- 
+
  if (j.spawnctr>0) j.spawnctr -= 1
  if (j.invt>0) j.invt -= 1
 end
@@ -465,11 +512,12 @@ function collide_enmy()
      j2=plyr
     end
    end
- 
+
    if (j1!=nil) then
     if (is_facing(j1,j2) and j1.rdy) then
      if (j2==enmy) then
       destroy_enemy(enmy)
+      plyr.score += 1
      else
       destroy_player()
      end
@@ -479,7 +527,7 @@ function collide_enmy()
      j2.lchrg=0
     end
    end
- 
+
    if (break_all) then
     if (plyr.rdy) then
      plyr.rdy=false
@@ -544,7 +592,7 @@ function anim_spawn(j,t)
   circfill(j.x,j.y,5+t,7)
   tpal_all(1)
  else
- 	tpal_all(7)
+  tpal_all(7)
  end
 end
 
@@ -590,7 +638,7 @@ function draw_jouster(j)
   j.rdy_anim=mid(0,j.rdy_anim+1,2)
   line(x1,j.y,x2,j.y,lcolor)
  end
- 
+
  if (flr(j.invt)%2==1) then fade(fade_idx)
  elseif (j.spawnctr <= 0) then tpal(12,12)
  else
