@@ -3,20 +3,49 @@ version 16
 __lua__
 -- template
 -- by laerin
+debug=false
+
+function _init()
+ -- set initial screen here
+end
+
+function _update()
+ com:update()
+ scr_mgr:update()
+end
+
+function _draw()
+ scr_mgr:draw()
+ if (debug) then
+  print('cpu:'..stat(1),80,1,8)
+  print('mem:'..stat(0),80,7,8)
+  print('fps:'..stat(7),80,13,8)
+ end
+end
 
 com={
  routines={},
- add_cor=function(self,cor)
+ args={},
+ add_cor=function(self,cor,arg)
   local cid=cocreate(cor)
   add(self.routines,cid)
+  if (arg != nil) self.args[cid]=arg
   return cid
  end,
  del_cor=function(self,cid)
   del(self.routines,cid)
+  if (self.args[cid]!=nil) self.args[cid]=nil
  end,
  update=function(self)
   for cor in all(self.routines) do
-   if (not coresume(cor)) del(self.routines,cor)
+   local alive=false
+   if (self.args[cor]==nil) then
+    alive=coresume(cor)
+   else
+    alive,self.args[cor]=coresume(cor,self.args[cor])
+   end
+
+   if (not alive) del(self.routines,cor)
   end
  end
 }
@@ -31,15 +60,14 @@ scr_mgr={
  end,
  update=function(self)
   if (self.active != 'none')
-   if (self.active != self.last) self.screens[self.active].init()
+   if (self.active != self.last) self.screens[self.active]:init()
 
-   self.screens[self.active].update()
+   self.screens[self.active]:update()
   end
   self.last=self.active
  end,
  draw=function(self)
-   self.screens[self.active].draw()
-  end
+  self.screens[self.active]:draw()
  end
 }
 
@@ -66,154 +94,64 @@ fade_mgr={
  fade=function(self,idx)
   if (idx==nil or idx==0) then
    pal()
+   self.val=0
   else
+   self.val=idx
    for i=0,15 do
-    pal(i,self.tbl[i+1])
+    pal(i,self.tbl[i+1][idx])
    end
   end
  end
 }
 
-function trans(scr,t,delay,inout)
- if (not scr_mgr.transitioning) then
- end
+function fpal(from,to)
+ pal(from,fade_mgr.tbl[to+1][fade_mgr.val])
 end
 
-function _init()
-end
-
-function _update()
- com:update()
- scr_mgr:update()
-end
-
-function _draw()
- scr_mgr:draw()
-end
-
-enemies={} --all enemies
-
--- debugging, remove when done
-show_stats=false
-
-cam={}
-cam.x=0
-cam.y=0
-cam.draw_x=0
-cam.draw_y=0
-
-last_game_mode=100
-game_mode=1 --what screen to use
-
-function _init()
- game_mode=0
- mload(0,0,48,32)
- mload(48,0,24,20)
-end
-
-update_fnc={
- start_update,
- game_update,
- over_update
-}
-draw_fnc={
- start_draw,
- game_draw,
- over_draw
-}
-
-function _update()
- transition_update()
- cor_update()
-
- if (last_game_mode != game_mode) then
-  if (last_game_mode == 1) then
-   game_cleanup()
-  end
- end
-
- -- handle updates
- update_fnc[game_mode+1]()
- end
- last_game_mode=game_mode
-end
-
-function _draw()
- draw_fnc[game_mode+1]()
- if (show_stats) then
-  print('cpu:'..stat(1),80,1,8)
-  print('mem:'..stat(0),80,7,8)
-  print('fps:'..stat(7),80,13,8)
- end
-end
-
--->8
--- screens
-
--- transitions
-transitioning=false
-trans_timer=15
-trans_delay=0
-next_state=0
-fade_idx=1
-lst_fade_idx=1
-
-fade_tbl={
- {0,0,0,0,0,0,0,0},
- {1,1,1,1,0,0,0,0},
- {2,2,2,2,1,0,0,0},
- {3,3,3,3,1,0,0,0},
- {4,4,2,2,2,1,0,0},
- {5,5,5,1,1,1,0,0},
- {6,6,13,13,5,5,1,0},
- {7,6,6,13,13,5,1,0},
- {8,8,8,2,2,2,0,0},
- {9,9,4,4,4,5,0,0},
- {10,10,9,4,4,5,5,0},
- {11,11,3,3,3,3,0,0},
- {12,12,12,3,1,1,1,0},
- {13,13,5,5,1,1,1,0},
- {14,14,13,4,2,2,1,0},
- {15,15,13,13,5,5,1,0}
-}
-
-function transition(to_state,delay)
- next_state=to_state
- trans_timer=15
- trans_delay=delay
- transitioning=true
-end
-
-function transition_update()
- if (transitioning) then
-  trans_delay=max(trans_delay-1,0)
-
-  if (trans_delay==0) then
-   trans_timer-=1
-   trans_timer=mid(0,trans_timer,15)
-   fade_idx=8-flr(trans_timer/2)
-   if (lst_fade_idx != fade_idx) fade(fade_idx)
-   lst_fade_idx = fade_idx
-   if (trans_timer <= 0) then
-    transitioning=false
-    game_mode=next_state
-    fade_idx=1
-    lst_fade_idx=1
-    pal()
-   end
-  end
- end
-end
-
-function fade(idx)
- idx=mid(1,flr(idx),8)
+function fpal_all(c)
  for i=0,15 do
-  pal(i,fade_tbl[i+1][idx])
+  fpal(i,c)
  end
 end
 
-function tpal(from,to)
- pal(from,fade_tbl[to+1][fade_idx])
+function trans(scr,t,delay,func,inout)
+ func = func or fade_inout
+ if (not scr_mgr.transitioning) then
+  scr_mgr.transitioning = true
+  local arg={}
+  arg.t=t
+  arg.delay=delay
+  arg.tmr=0
+  arg.scr=scr
+  arg.inout=inout or false
+
+  com:add_cor(func,arg)
+ end
+end
+
+function fade_inout(arg)
+ while (arg.delay > 0) do
+  arg.delay -= 1
+  yield(arg)
+ end
+
+ while (arg.tmr < arg.t) do
+  arg.tmr += 1
+  local p = arg.tmr/arg.t
+
+  if (not arg.inout) then
+   fade_mgr:fade(flr(p*7))
+  else
+   if (p<0.5) then
+    fade_mgr:fade(flr(14*p))
+   else
+    scr_mgr.active=arg.scr
+    fade_mgr:fade(flr(14-14*p))
+  end
+
+  yield(arg)
+ end
+ scr_mgr.active=arg.scr
 end
 
 function sign(a)
@@ -222,19 +160,38 @@ function sign(a)
  if (a == 0) then return 0 end
 end
 
-function tpal_all(c)
- for i=0,15 do
-  tpal(i,c)
- end
-end
-
 function dist(x1,y1,x2,y2)
  local x=abs(x1-x2)
  local y=abs(y1-y2)
  return sqrt(x*x+y*y)
 end
+-->8
+-- game screen
+game={}
 
+function game:init()
+ camera_shake = 0
+ cam.x = 0
+ cam.y = 0
+end
+
+function game:update()
+ camera_effects()
+end
+
+function game:draw()
+end
+
+scr_mgr:add('game',game)
+
+-->8
 -- camera
+cam={}
+cam.x = 0
+cam.y = 0
+cam.draw_x = 0
+cam.draw_Y = 0
+
 function camera_effects()
  screen_shake()
 end
@@ -254,62 +211,6 @@ function screen_shake()
  camera_shake *= fade
  if (camera_shake <0.05) then
   camera_shake = 0
- end
-end
-
--- particles
-particles={}
-pmax=32
-function add_particles(x,y,c,num,sz)
- local cp=num+#particles
- if (cp>pmax) then
-  local c=cp-pmax
-  local i=0
-  for p in all(particles) do
-   if (i<c) del(particles,p)
-   i+=1
-  end
- end
- for i=1,num do
-  local p={}
-  p.life=flr(rnd(15)+5)
-  p.lmax=p.life
-  p.size=flr(rnd(sz*0.5)+sz*0.75)
-  p.smax=p.size
-  p.color=c
-  p.dir_x=rnd(2)-1
-  p.dir_y=rnd(1)-1
-  p.spd=rnd(5)+1
-  p.x=x
-  p.y=y
-  add(particles,p)
- end
-end
-
-function update_particles()
- for p in all(particles) do
-  p.life-=1
-  if (p.life > 0) then
-   p.x += p.dir_x * p.spd
-   p.y += p.dir_y * p.spd
-   p.size = p.smax * (p.life/p.lmax)
-  else
-   del(particles,p)
-  end
- end
-end
-
-function draw_particles()
- for p in all(particles) do
-  local x = p.x-p.size/2
-  local y = p.y-p.size/2
-  local c = p.color
-  if (p.life == p.lmax-1) then
-   c=7
-  elseif (p.life == p.lmax-2) then
-   c=7
-  end
-  rectfill(x,y,x+p.size,y+p.size,p.color)
  end
 end
 __gfx__
