@@ -184,6 +184,133 @@ end
 
 scr_mgr:add('game',game)
 
+plyr={
+ x=0,
+ y=0,
+ hlth=3,
+ grnd=false,
+ wall=false,
+ airtmr=0,
+ airpress=false,
+ vx=0,
+ vy=0
+}
+
+function plyr:spawn(x,y)
+ self.hlth=3
+ self.x=x
+ self.y=y
+ self.grnd=false
+ self.wall=0
+ self.airtmr=0
+ self.airpress=false
+ self.vx=0
+ self.vy=0
+end
+
+function plyr:update()
+ local h=0
+ local j=0
+
+ if (btn(0)) h+=1
+ if (btn(1)) h-=1
+
+ local hit=kmove(self,h*8,0)
+ if (not hit) then
+  self.grnd=false
+  self.wall=0
+ else
+  self.grnd=hit.y<0
+  self.wall=sign(hit.x)
+ end
+end
+
+function plyr:destroy()
+end
+
+function kmove(obj,xdist,ydist,mx,my)
+ mx=mx or 0
+ my=my or 0
+ local hit=nil
+ if (obj.bbox) then
+  hit=col_map(obj.bbox.x-obj.bbox.hw,obj.bbox.y-obj.bbox.hh,obj.bbox.h,obj.bbox.w,mx,my)
+  if (hit.flags > 0x00) then
+   distx += hit.x
+   disty += hit.y
+  end
+ end
+
+ obj.x+=xdist
+ obj.y+=ydist
+ return hit
+end
+
+-- tests only the corners of the bounding box
+-- 0x02 is reserved for solid tiles
+function col_map(x,y,h,w,mx,my)
+ mx=mx or 0
+ my=my or 0
+ h=h or 8
+ w=w or 8
+
+ local x2=flr((x+w)/8)
+ local y2=flr((y+h)/8)
+ local x1=flr(x/8)
+ local y1=flr(y/8)
+
+ local h={}
+ h[1]=fget(mget(x+mx,y+my))
+ h[2]=fget(mget(x2+mx,y+my))
+ h[3]=fget(mget(x+mx,y2+my))
+ h[4]=fget(mget(x2+mx,y2+my))
+
+ local hit={}
+ hit.x=0
+ hit.y=0
+ hit.flags=0x00
+
+ for i=1,4 do
+  if (band(h[i],0xFF) > 0x00) then
+   if (band(h[i],0x02)==0x02) then
+    local i2=flr((i-1)/2)
+    hit.x += ((i%2)*(x-x1*8)) + ((i%2-1)*(x2*8-x-w))
+    hit.y += (i2-1)*(y1*8-y) + i2*(y2*8-y-h)
+   end
+   hit.flags |= h[i]
+  end
+ end
+end
+
+bbox={
+ new=function(x,y,w,h)
+  local box={}
+  box.cx=x
+  box.cy=y
+  box.w=w
+  box.h=h
+  box.hh=h/2
+  box.hw=h/2
+ end
+}
+
+function col_box(b1,b2)
+ local hit={}
+ hit.x=0
+ hit.y=0
+ hit.hit=false
+ if (abs(b1.x-b2.x) < (b1.hw+b2.hw)) then
+  if (abs(b1.y-b2.y) < (b1.hh+b2.hh)) then
+   hit.hit=true
+   local xd=sign(b1.x-b2.x)
+   local yd=sign(b1.y-b2.y)
+   hit.x=(b1.x-xd*b1.hw)-(b2.x+xd*b2.hw)
+   hit.y=(b1.y-yd*b1.hh)-(b2.y+yd*b2.hh)
+  end
+ end
+
+ return hit
+end
+
 -->8
 -- camera
 cam={}
