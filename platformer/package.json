@@ -1,0 +1,8 @@
+{
+  "pico8": "http://www.lexaloffle.com/pico8",
+  "cartName": "platformer",
+  "labelTag1": "a platformer",
+  "labelTag2": "by laerin",
+  "dataCart": "data/data.p8",
+  "codeDirectory": "code"
+}
